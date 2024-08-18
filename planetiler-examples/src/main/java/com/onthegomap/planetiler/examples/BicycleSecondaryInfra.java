@@ -101,7 +101,7 @@ public class BicycleSecondaryInfra implements Profile {
     if (sourceFeature.isPoint() && sourceFeature.hasTag("amenity", "charging_station") && sourceFeature.hasTag("bicycle", "yes")) {
       int chargingNumberCount = chargingNumber.getAndIncrement();
 
-      long capacity = sourceFeature.getLong("capacity");
+      long capacity = sourceFeature.getLong("socket:schuko") + sourceFeature.getLong("socket:typee");
       if (capacity > 0) {
         try {
           chargingNumberCount = Math.toIntExact(chargingNumber.get() * (capacity+ 1));
@@ -111,13 +111,16 @@ public class BicycleSecondaryInfra implements Profile {
       }
       features.point("charging")
         .setMinZoom(5)
-        .setAttr("capacity", sourceFeature.getTag("capacity"))
-        .setAttr("capacity:cargobike", sourceFeature.getTag("capacity:cargo_bike"))
-        .setAttr("short_name", sourceFeature.getTag("short_name"))
         .setAttr("name", sourceFeature.getTag("name"))
+        .setAttr("operator", sourceFeature.getTag("operator"))
         .setAttr("costs", sourceFeature.getTag("fee"))
-        .setAttr("covered", sourceFeature.getTag("covered"))
-        .setAttr("access", sourceFeature.getTag("access"))
+        .setAttr("brand", sourceFeature.getTag("brand"))
+        .setAttr("socket:schuko", sourceFeature.getTag("socket:schuko"))
+        .setAttr("socket:bosch_3pin", sourceFeature.getTag("socket:bosch_3pin"))
+        .setAttr("socket:bosch_5pin", sourceFeature.getTag("socket:bosch_5pin"))
+        .setAttr("socket:shimano_steps_5pin", sourceFeature.getTag("socket:shimano_steps_5pin"))
+        .setAttr("socket:ropd", sourceFeature.getTag("socket:ropd"))
+        .setAttr("socket:typee", sourceFeature.getTag("socket:typee"))
         // to limit parking displayed at lower zoom levels:
         // 1) set a sort key that defines a priority ordering of parkings. For mountains, you might use "elevation"
         // but for parkings we just set it to the order in which we see them.
