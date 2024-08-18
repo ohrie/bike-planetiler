@@ -144,7 +144,33 @@ public class BicycleSecondaryInfra implements Profile {
         .setMinZoom(5)
         .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("short_name", sourceFeature.getTag("short_name"))
-        .setAttr("covered", sourceFeature.getTag("covered"))
+        .setAttr("bicycle_pump", sourceFeature.getTag("service:bicycle:pump"))
+        .setAttr("tools", sourceFeature.getTag("service:bicycle:tools"))
+        .setAttr("compressed_air", sourceFeature.getTag("compressed_air"))
+
+        // 2) at lower zoom levels, divide each 256x256 px tile into 32x32 px squares and in each square only include
+        // the parkings with the lowest sort key within that square
+        .setPointLabelGridSizeAndLimit(
+          10, // only limit at z12 and below
+          16, // break the tile up into 32x32 px squares
+          10 // any only keep the 4 nodes with lowest sort-key in each 32px square
+        )
+        // and also whenever you set a label grid size limit, make sure you increase the buffer size so no
+        // label grid squares will be the consistent between adjacent tiles
+        .setBufferPixelOverrides(ZoomFunction.maxZoom(12, 32));
+    }
+
+    //////////////////////////////////////////////////////////
+    ////////////     Compressed Air    //////////////////////
+    //////////////////////////////////////////////////////////
+    if (sourceFeature.isPoint() && sourceFeature.hasTag("amenity", "compressed_air")) {
+
+      features.point("compressed_air")
+        .setMinZoom(5)
+        .setAttr("name", sourceFeature.getTag("name"))
+        .setAttr("access", sourceFeature.getTag("access"))
+        .setAttr("costs", sourceFeature.getTag("fee"))
+        .setAttr("valves", sourceFeature.getTag("valves"))
 
         // 2) at lower zoom levels, divide each 256x256 px tile into 32x32 px squares and in each square only include
         // the parkings with the lowest sort key within that square
