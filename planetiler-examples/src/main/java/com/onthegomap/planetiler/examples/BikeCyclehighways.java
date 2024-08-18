@@ -98,10 +98,12 @@ public class BikeCyclehighways implements Profile {
       }
     }
 
-    if (sourceFeature.canBeLine() && sourceFeature.hasTag("bicycle_road", "yes")) {
+    if (sourceFeature.canBeLine() && (sourceFeature.hasTag("bicycle_road", "yes") || sourceFeature.hasTag("cyclestreet", "yes"))) {
         features.line("bicycleroad")
           .setAttr("name", sourceFeature.getTag("name"))
           .setAttr("highway", sourceFeature.getTag("highway"))
+          .setAttr("cyclestreet", sourceFeature.getTag("cyclestreet"))
+          .setAttr("bicycle_road", sourceFeature.getTag("bicycle_road"))
           .setZoomRange(0, 15);
     }
   }
@@ -139,12 +141,12 @@ public class BikeCyclehighways implements Profile {
 
   @Override
   public String name() {
-    return "Bike Paths Overlay";
+    return "Cyclehighway relations";
   }
 
   @Override
   public String description() {
-    return "An example overlay showing bicycle routes";
+    return "Cyclehighways and bicycle roads";
   }
 
   @Override
