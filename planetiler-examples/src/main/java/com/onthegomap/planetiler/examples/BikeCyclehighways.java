@@ -1,4 +1,4 @@
-package com.onthegomap.planetiler.examples;
+package com.onthegomap.planetiler.cycling;
 
 import com.onthegomap.planetiler.FeatureCollector;
 import com.onthegomap.planetiler.FeatureMerge;
@@ -26,7 +26,7 @@ import java.util.List;
  * <li>and view the output at <a href="http://localhost:8080">localhost:8080</a></li>
  * </ol>
  */
-public class BikeRouteOverlay implements Profile {
+public class BikeCyclehighways implements Profile {
   /*
    * The processing happens in 3 steps:
    * 1. On the first pass through the input file, store relevant information from OSM bike route relations
@@ -47,7 +47,7 @@ public class BikeRouteOverlay implements Profile {
     // OSM ID of the relation (required):
     @Override long id,
     // Values for tags extracted from the OSM relation:
-    String name, String ref, String route, String network
+    String name, String ref, String route
   ) implements OsmRelationInfo {}
 
   @Override
@@ -56,21 +56,15 @@ public class BikeRouteOverlay implements Profile {
     if (relation.hasTag("type", "route")) {
       // where route=bicycle ...
       if (relation.hasTag("route", "bicycle")) {
-        // then store a RouteRelationInfo instance with tags we'll need later
-        return List.of(new RouteRelationInfo(
-          relation.id(),
-          relation.getString("name"),
-          relation.getString("ref"),
-          relation.getString("route"),
-          // except map network abbreviation to a human-readable value
-          switch (relation.getString("network", "")) {
-            case "icn" -> "international";
-            case "ncn" -> "national";
-            case "rcn" -> "regional";
-            case "lcn" -> "local";
-            default -> "other";
-          }
-        ));
+        if (relation.hasTag("cycle_highway", "yes")) {
+          // then store a RouteRelationInfo instance with tags we'll need later
+          return List.of(new RouteRelationInfo(
+            relation.id(),
+            relation.getString("name"),
+            relation.getString("ref"),
+            relation.getString("route")
+          ));
+        }
       }
     }
     // for any other relation, return null to ignore
@@ -94,8 +88,7 @@ public class BikeRouteOverlay implements Profile {
         // (routeInfo.role() also has the "role" of this relation member if needed)
         RouteRelationInfo relation = routeInfo.relation();
         // Break the output into layers named: "{bicycle,route}-route-{international,national,regional,local,other}"
-        String layerName = relation.route + "-route-" + relation.network;
-        features.line(layerName)
+        features.line("cyclehighway")
           .setAttr("name", relation.name)
           .setAttr("ref", relation.ref)
           .setZoomRange(0, 14)
@@ -103,6 +96,13 @@ public class BikeRouteOverlay implements Profile {
           // to merge lines with the same tags where the endpoints are touching
           .setMinPixelSize(0);
       }
+    }
+
+    if (sourceFeature.canBeLine() && sourceFeature.hasTag("bicycle_road", "yes")) {
+        features.line("bicycleroad")
+          .setAttr("name", sourceFeature.getTag("name"))
+          .setAttr("highway", sourceFeature.getTag("highway"))
+          .setZoomRange(0, 15);
     }
   }
 
@@ -119,11 +119,15 @@ public class BikeRouteOverlay implements Profile {
     // FeatureMerge has several utilities for merging geometries in a layer that share the same tags.
     // `mergeLineStrings` combines lines with the same tags where the endpoints touch.
     // Tiles are 256x256 pixels and all FeatureMerge operations work in tile pixel coordinates.
-    return FeatureMerge.mergeLineStrings(items,
-      0.5, // after merging, remove lines that are still less than 0.5px long
-      0.1, // simplify output linestrings using a 0.1px tolerance
-      4 // remove any detail more than 4px outside the tile boundary
-    );
+    if(layer == "cyclehighway") {
+      return FeatureMerge.mergeLineStrings(items,
+        0.5, // after merging, remove lines that are still less than 0.5px long
+        0.1, // simplify output linestrings using a 0.1px tolerance
+        4 // remove any detail more than 4px outside the tile boundary
+      );
+    } else {
+      return items;
+    }
   }
 
   /*
@@ -171,11 +175,11 @@ public class BikeRouteOverlay implements Profile {
     // Planetiler is a convenience wrapper around the lower-level API for the most common use-cases.
     // See ToiletsOverlayLowLevelApi for an example using the lower-level API
     Planetiler.create(args)
-      .setProfile(new BikeRouteOverlay())
+      .setProfile(new BikeCyclehighways())
       // override this default with osm_path="path/to/data.osm.pbf"
       .addOsmSource("osm", Path.of("data", "sources", area + ".osm.pbf"), "geofabrik:" + area)
       // override this default with mbtiles="path/to/output.mbtiles"
-      .overwriteOutput(Path.of("data", "bikeroutes.mbtiles"))
+      .overwriteOutput(Path.of("data", "cyclehighways.mbtiles"))
       .run();
   }
 }
