@@ -65,7 +65,7 @@ public class BikeRouteOverlay implements Profile {
   @Override
   public List<OsmRelationInfo> preprocessOsmRelation(OsmElement.Relation relation) {
     // If this is a "route" relation ...
-    if (relation.hasTag("type", "route")) {
+    if (relation.hasTag("type", "route") || relation.hasTag("type", "network")) {
       // where route=bicycle ...
       if (relation.hasTag("route", "bicycle")) {
         // then store a RouteRelationInfo instance with tags we'll need later
