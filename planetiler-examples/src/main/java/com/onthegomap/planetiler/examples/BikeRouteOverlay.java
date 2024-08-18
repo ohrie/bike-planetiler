@@ -10,7 +10,9 @@ import com.onthegomap.planetiler.reader.SourceFeature;
 import com.onthegomap.planetiler.reader.osm.OsmElement;
 import com.onthegomap.planetiler.reader.osm.OsmRelationInfo;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Builds a map of bike routes from ways contained in OpenStreetMap relations tagged with
@@ -49,6 +51,16 @@ public class BikeRouteOverlay implements Profile {
     // Values for tags extracted from the OSM relation:
     String name, String ref, String route, String network
   ) implements OsmRelationInfo {}
+
+    // Set the zoom range for each network type
+    private static final Map<String, Integer> ZOOMRANGE_MIN = new HashMap<>();
+
+    static {
+        ZOOMRANGE_MIN.put("international", 0);
+        ZOOMRANGE_MIN.put("national", 5);
+        ZOOMRANGE_MIN.put("regional", 7);
+        ZOOMRANGE_MIN.put("local", 9);
+    }
 
   @Override
   public List<OsmRelationInfo> preprocessOsmRelation(OsmElement.Relation relation) {
@@ -98,10 +110,11 @@ public class BikeRouteOverlay implements Profile {
         features.line(layerName)
           .setAttr("name", relation.name)
           .setAttr("ref", relation.ref)
-          .setZoomRange(0, 14)
           // don't filter out short line segments even at low zooms because the next step needs them
           // to merge lines with the same tags where the endpoints are touching
-          .setMinPixelSize(0);
+          .setMinPixelSize(0)
+          // ToDo set this based on the network type
+          .setZoomRange(ZOOMRANGE_MIN.getOrDefault(relation.network, 0), 14);
       }
     }
   }

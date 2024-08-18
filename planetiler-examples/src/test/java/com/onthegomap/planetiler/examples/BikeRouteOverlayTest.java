@@ -55,7 +55,7 @@ class BikeRouteOverlayTest {
     ), feature.getAttrsAtZoom(14));
     // output geometry is in world coordinates where 0,0 is top left and 1,1 is bottom right
     assertEquals(0.085, feature.getGeometry().getLength(), 1e-2);
-    assertEquals(0, feature.getMinZoom());
+    assertEquals(9, feature.getMinZoom());
     assertEquals(14, feature.getMaxZoom());
   }
 
