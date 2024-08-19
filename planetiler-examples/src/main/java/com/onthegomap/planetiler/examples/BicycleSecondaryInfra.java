@@ -42,6 +42,8 @@ public class BicycleSecondaryInfra implements Profile {
         }
       }
       features.point("parking")
+        .setAttr("osm_type", sourceFeature.getTag("node"))
+        .setAttr("osm_id", sourceFeature.id())
         .setAttr("cargobike", sourceFeature.getTag("cargo_bike"))
         .setAttr("type", sourceFeature.getTag("bicycle_parking"))
         .setAttr("type:position", sourceFeature.getTag("bicycle_parking:position"))
@@ -71,13 +73,15 @@ public class BicycleSecondaryInfra implements Profile {
     }
     if(sourceFeature.canBePolygon() && sourceFeature.hasTag("amenity", "bicycle_parking")) {
       features.polygon("parking-lines")
+          .setAttr("osm_type", sourceFeature.getTag("way"))
+          .setAttr("osm_id", sourceFeature.id())
+          .setAttr("name", sourceFeature.getTag("name"))
+          .setAttr("short_name", sourceFeature.getTag("short_name"))
           .setAttr("cargobike", sourceFeature.getTag("cargo_bike"))
           .setAttr("type", sourceFeature.getTag("bicycle_parking"))
           .setAttr("type:position", sourceFeature.getTag("bicycle_parking:position"))
           .setAttr("capacity", sourceFeature.getTag("capacity"))
           .setAttr("capacity:cargobike", sourceFeature.getTag("capacity:cargo_bike"))
-          .setAttr("short_name", sourceFeature.getTag("short_name"))
-          .setAttr("name", sourceFeature.getTag("name"))
           .setAttr("costs", sourceFeature.getTag("fee"))
           .setAttr("covered", sourceFeature.getTag("covered"))
           .setAttr("access", sourceFeature.getTag("access"))
@@ -88,10 +92,12 @@ public class BicycleSecondaryInfra implements Profile {
           .setMinPixelSize(0);
       // Add centered point in polygon for using as label in map client
       features.centroid("parking-labels")
+        .setAttr("osm_type", sourceFeature.getTag("way"))
+        .setAttr("osm_id", sourceFeature.id())
+        .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("cargobike", sourceFeature.getTag("cargo_bike"))
         .setAttr("capacity", sourceFeature.getTag("capacity"))
         .setAttr("short_name", sourceFeature.getTag("short_name"))
-        .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("covered", sourceFeature.getTag("covered"))
         .setAttr("access", sourceFeature.getTag("access"))
         .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
@@ -113,6 +119,8 @@ public class BicycleSecondaryInfra implements Profile {
         }
       }
       features.point("charging")
+        .setAttr("osm_type", sourceFeature.getTag("node"))
+        .setAttr("osm_id", sourceFeature.id())
         .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("operator", sourceFeature.getTag("operator"))
         .setAttr("costs", sourceFeature.getTag("fee"))
@@ -148,15 +156,15 @@ public class BicycleSecondaryInfra implements Profile {
     if (sourceFeature.isPoint() && sourceFeature.hasTag("amenity", "bicycle_repair_station")) {
 
       features.point("repairstation")
-        .setMinZoom(5)
+        .setAttr("osm_type", sourceFeature.getTag("node"))
+        .setAttr("osm_id", sourceFeature.id())
         .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("short_name", sourceFeature.getTag("short_name"))
         .setAttr("bicycle_pump", sourceFeature.getTag("service:bicycle:pump"))
         .setAttr("tools", sourceFeature.getTag("service:bicycle:tools"))
         .setAttr("compressed_air", sourceFeature.getTag("compressed_air"))
         .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
-
-
+        .setMinZoom(5)
         // 2) at lower zoom levels, divide each 256x256 px tile into 32x32 px squares and in each square only include
         // the parkings with the lowest sort key within that square
         .setPointLabelGridSizeAndLimit(
@@ -175,12 +183,14 @@ public class BicycleSecondaryInfra implements Profile {
     if (sourceFeature.isPoint() && sourceFeature.hasTag("amenity", "compressed_air")) {
 
       features.point("compressed_air")
-        .setMinZoom(5)
+        .setAttr("osm_type", sourceFeature.getTag("node"))
+        .setAttr("osm_id", sourceFeature.id())
         .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("access", sourceFeature.getTag("access"))
         .setAttr("costs", sourceFeature.getTag("fee"))
         .setAttr("valves", sourceFeature.getTag("valves"))
         .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
+        .setMinZoom(5)
 
         // 2) at lower zoom levels, divide each 256x256 px tile into 32x32 px squares and in each square only include
         // the parkings with the lowest sort key within that square
