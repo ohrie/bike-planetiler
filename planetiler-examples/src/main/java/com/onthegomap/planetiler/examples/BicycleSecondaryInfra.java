@@ -42,7 +42,6 @@ public class BicycleSecondaryInfra implements Profile {
         }
       }
       features.point("parking")
-        .setMinZoom(5)
         .setAttr("cargobike", sourceFeature.getTag("cargo_bike"))
         .setAttr("type", sourceFeature.getTag("bicycle_parking"))
         .setAttr("type:position", sourceFeature.getTag("bicycle_parking:position"))
@@ -63,14 +62,14 @@ public class BicycleSecondaryInfra implements Profile {
           10, // only limit at z12 and below
           16, // break the tile up into 32x32 px squares
           10 // any only keep the 4 nodes with lowest sort-key in each 32px square
-        )
+          )
+          .setMinZoom(5)
         // and also whenever you set a label grid size limit, make sure you increase the buffer size so no
         // label grid squares will be the consistent between adjacent tiles
         .setBufferPixelOverrides(ZoomFunction.maxZoom(12, 32));
     }
     if(sourceFeature.canBePolygon() && sourceFeature.hasTag("amenity", "bicycle_parking")) {
       features.polygon("parking-lines")
-          .setMinZoom(5)
           .setAttr("cargobike", sourceFeature.getTag("cargo_bike"))
           .setAttr("type", sourceFeature.getTag("bicycle_parking"))
           .setAttr("type:position", sourceFeature.getTag("bicycle_parking:position"))
@@ -81,7 +80,7 @@ public class BicycleSecondaryInfra implements Profile {
           .setAttr("costs", sourceFeature.getTag("fee"))
           .setAttr("covered", sourceFeature.getTag("covered"))
           .setAttr("access", sourceFeature.getTag("access"))
-
+          .setMinZoom(5)
           // don't filter out short line segments even at low zooms because the next step needs them
           // to merge lines with the same tags where the endpoints are touching
           .setMinPixelSize(0);
@@ -92,7 +91,8 @@ public class BicycleSecondaryInfra implements Profile {
         .setAttr("short_name", sourceFeature.getTag("short_name"))
         .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("covered", sourceFeature.getTag("covered"))
-        .setAttr("access", sourceFeature.getTag("access"));
+        .setAttr("access", sourceFeature.getTag("access"))
+        .setMinZoom(5);
     }
 
     //////////////////////////////////////////////////////////
@@ -110,7 +110,6 @@ public class BicycleSecondaryInfra implements Profile {
         }
       }
       features.point("charging")
-        .setMinZoom(5)
         .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("operator", sourceFeature.getTag("operator"))
         .setAttr("costs", sourceFeature.getTag("fee"))
@@ -132,6 +131,7 @@ public class BicycleSecondaryInfra implements Profile {
           16, // break the tile up into 32x32 px squares
           10 // any only keep the 4 nodes with lowest sort-key in each 32px square
         )
+        .setMinZoom(5)
         // and also whenever you set a label grid size limit, make sure you increase the buffer size so no
         // label grid squares will be the consistent between adjacent tiles
         .setBufferPixelOverrides(ZoomFunction.maxZoom(12, 32));
@@ -235,7 +235,7 @@ public class BicycleSecondaryInfra implements Profile {
       // override this default with osm_path="path/to/data.osm.pbf"
       .addOsmSource("osm", Path.of("data", "sources", area + ".osm.pbf"), "geofabrik:" + area)
       // override this default with mbtiles="path/to/output.mbtiles"
-      .overwriteOutput("mbtiles", Path.of("data", "bike-secondary-infra.mbtiles"))
+      .overwriteOutput(Path.of("data", "bike-secondary-infra.mbtiles"))
       .run();
   }
 }
