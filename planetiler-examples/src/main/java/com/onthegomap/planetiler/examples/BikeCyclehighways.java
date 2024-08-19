@@ -47,7 +47,7 @@ public class BikeCyclehighways implements Profile {
     // OSM ID of the relation (required):
     @Override long id,
     // Values for tags extracted from the OSM relation:
-    String name, String ref, String route
+    String name, String ref, String route, String cyclenetwork
   ) implements OsmRelationInfo {}
 
   @Override
@@ -62,7 +62,8 @@ public class BikeCyclehighways implements Profile {
             relation.id(),
             relation.getString("name"),
             relation.getString("ref"),
-            relation.getString("route")
+            relation.getString("route"),
+            relation.getString("cycle_network")
           ));
         }
       }
@@ -91,6 +92,7 @@ public class BikeCyclehighways implements Profile {
         features.line("cyclehighway")
           .setAttr("name", relation.name)
           .setAttr("ref", relation.ref)
+          .setAttr("cycle_network", relation.cyclenetwork)
           .setZoomRange(0, 14)
           // don't filter out short line segments even at low zooms because the next step needs them
           // to merge lines with the same tags where the endpoints are touching

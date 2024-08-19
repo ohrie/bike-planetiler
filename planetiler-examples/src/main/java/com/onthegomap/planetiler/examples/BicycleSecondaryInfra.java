@@ -51,6 +51,7 @@ public class BicycleSecondaryInfra implements Profile {
         .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("costs", sourceFeature.getTag("fee"))
         .setAttr("covered", sourceFeature.getTag("covered"))
+        .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
         .setAttr("access", sourceFeature.getTag("access"))
         // to limit parking displayed at lower zoom levels:
         // 1) set a sort key that defines a priority ordering of parkings. For mountains, you might use "elevation"
@@ -80,7 +81,8 @@ public class BicycleSecondaryInfra implements Profile {
           .setAttr("costs", sourceFeature.getTag("fee"))
           .setAttr("covered", sourceFeature.getTag("covered"))
           .setAttr("access", sourceFeature.getTag("access"))
-          .setMinZoom(5)
+          .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
+          .setMinZoom(10)
           // don't filter out short line segments even at low zooms because the next step needs them
           // to merge lines with the same tags where the endpoints are touching
           .setMinPixelSize(0);
@@ -92,6 +94,7 @@ public class BicycleSecondaryInfra implements Profile {
         .setAttr("name", sourceFeature.getTag("name"))
         .setAttr("covered", sourceFeature.getTag("covered"))
         .setAttr("access", sourceFeature.getTag("access"))
+        .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
         .setMinZoom(5);
     }
 
@@ -114,6 +117,7 @@ public class BicycleSecondaryInfra implements Profile {
         .setAttr("operator", sourceFeature.getTag("operator"))
         .setAttr("costs", sourceFeature.getTag("fee"))
         .setAttr("brand", sourceFeature.getTag("brand"))
+        .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
         .setAttr("socket:schuko", sourceFeature.getTag("socket:schuko"))
         .setAttr("socket:bosch_3pin", sourceFeature.getTag("socket:bosch_3pin"))
         .setAttr("socket:bosch_5pin", sourceFeature.getTag("socket:bosch_5pin"))
@@ -150,6 +154,8 @@ public class BicycleSecondaryInfra implements Profile {
         .setAttr("bicycle_pump", sourceFeature.getTag("service:bicycle:pump"))
         .setAttr("tools", sourceFeature.getTag("service:bicycle:tools"))
         .setAttr("compressed_air", sourceFeature.getTag("compressed_air"))
+        .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
+
 
         // 2) at lower zoom levels, divide each 256x256 px tile into 32x32 px squares and in each square only include
         // the parkings with the lowest sort key within that square
@@ -174,6 +180,7 @@ public class BicycleSecondaryInfra implements Profile {
         .setAttr("access", sourceFeature.getTag("access"))
         .setAttr("costs", sourceFeature.getTag("fee"))
         .setAttr("valves", sourceFeature.getTag("valves"))
+        .setAttr("opening_hours", sourceFeature.getTag("opening_hours"))
 
         // 2) at lower zoom levels, divide each 256x256 px tile into 32x32 px squares and in each square only include
         // the parkings with the lowest sort key within that square
