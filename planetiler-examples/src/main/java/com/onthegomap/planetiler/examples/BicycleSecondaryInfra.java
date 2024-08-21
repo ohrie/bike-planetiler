@@ -1,12 +1,16 @@
 package com.onthegomap.planetiler.cycling;
 
 import com.onthegomap.planetiler.FeatureCollector;
+import com.onthegomap.planetiler.FeatureMerge;
 import com.onthegomap.planetiler.Planetiler;
 import com.onthegomap.planetiler.Profile;
+import com.onthegomap.planetiler.VectorTile;
 import com.onthegomap.planetiler.config.Arguments;
 import com.onthegomap.planetiler.reader.SourceFeature;
 import com.onthegomap.planetiler.util.ZoomFunction;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class BicycleSecondaryInfra implements Profile {
@@ -203,6 +207,66 @@ public class BicycleSecondaryInfra implements Profile {
         // label grid squares will be the consistent between adjacent tiles
         .setBufferPixelOverrides(ZoomFunction.maxZoom(12, 32));
     }
+
+    //////////////////////////////////////////////////////////
+    ////////////   Highway maxspeeds    //////////////////////
+    //////////////////////////////////////////////////////////
+    String highestMaxspeed = getHighestMaxspeed(sourceFeature);
+
+    if (sourceFeature.canBeLine()
+    && sourceFeature.getTag("highway") != null
+    && (sourceFeature.getLong("maxspeed") >= 80 || sourceFeature.getLong("maxspeed:forward") >= 80 || sourceFeature.getLong("maxspeed:forward") >= 80 )
+    && !(sourceFeature.hasTag("highway", "motorway_link") ||sourceFeature.hasTag("highway", "motorway") || sourceFeature.hasTag("motorroad", "yes")))  {
+      features.line("maxspeed")
+        .setAttr("maxspeed", highestMaxspeed)
+        .setMinZoom(13);
+    }
+  }
+
+  private String getHighestMaxspeed(SourceFeature sourceFeature) {
+      // Retrieve the maxspeed values
+      Optional<Integer> maxspeed = parseMaxspeed((String) sourceFeature.getTag("maxspeed"));
+      Optional<Integer> maxspeedForward = parseMaxspeed((String) sourceFeature.getTag("maxspeed:forward"));
+      Optional<Integer> maxspeedBackward = parseMaxspeed((String) sourceFeature.getTag("maxspeed:backward"));
+
+      // Determine the highest value
+      int highest = maxspeed.orElse(0);
+      if (maxspeedForward.isPresent() && maxspeedForward.get() > highest) {
+          highest = maxspeedForward.get();
+      }
+      if (maxspeedBackward.isPresent() && maxspeedBackward.get() > highest) {
+          highest = maxspeedBackward.get();
+      }
+
+      return highest > 0 ? String.valueOf(highest) : null;
+  }
+
+  private Optional<Integer> parseMaxspeed(String maxspeed) {
+      try {
+          return Optional.ofNullable(maxspeed).map(Integer::parseInt);
+      } catch (NumberFormatException e) {
+          return Optional.empty();
+      }
+  }
+
+  /*
+   * Step 3)
+   *
+   * Before writing tiles to the output, first merge linestrings where the endpoints are touching that share the same
+   * tags to improve line and text rendering in clients.
+   */
+
+  @Override
+  public List<VectorTile.Feature> postProcessLayerFeatures(String layer, int zoom,
+    List<VectorTile.Feature> items) {
+    // FeatureMerge has several utilities for merging geometries in a layer that share the same tags.
+    // `mergeLineStrings` combines lines with the same tags where the endpoints touch.
+    // Tiles are 256x256 pixels and all FeatureMerge operations work in tile pixel coordinates.
+    return FeatureMerge.mergeLineStrings(items,
+      2, // in px: after merging, remove lines that are still less than px long
+      1, // simplify output linestrings using a tolerance in px
+      6 // remove any detail more than 4px outside the tile boundary
+    );
   }
 
   /*
