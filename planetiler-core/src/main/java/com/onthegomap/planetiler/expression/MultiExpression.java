@@ -4,8 +4,9 @@ import static com.onthegomap.planetiler.expression.Expression.FALSE;
 import static com.onthegomap.planetiler.expression.Expression.TRUE;
 import static com.onthegomap.planetiler.expression.Expression.matchType;
 
-import com.onthegomap.planetiler.reader.SourceFeature;
 import com.onthegomap.planetiler.reader.WithGeometryType;
+import com.onthegomap.planetiler.reader.WithSource;
+import com.onthegomap.planetiler.reader.WithSourceLayer;
 import com.onthegomap.planetiler.reader.WithTags;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -39,12 +40,27 @@ public record MultiExpression<T>(List<Entry<T>> expressions) implements Simplifi
   private static final Logger LOGGER = LoggerFactory.getLogger(MultiExpression.class);
   private static final Comparator<WithId> BY_ID = Comparator.comparingInt(WithId::id);
 
+  /**
+   * Returns a new multi-expression from {@code expressions} where multiple expressions for the same key get OR'd
+   * together.
+   * <p>
+   * If the order in which expresions match matter, use {@link #ofOrdered(List)} instead.
+   */
   public static <T> MultiExpression<T> of(List<Entry<T>> expressions) {
     LinkedHashMap<T, Expression> map = new LinkedHashMap<>();
     for (var expression : expressions) {
       map.merge(expression.result, expression.expression, Expression::or);
     }
-    return new MultiExpression<>(map.entrySet().stream().map(e -> entry(e.getKey(), e.getValue())).collect(Collectors.toList()));
+    return new MultiExpression<>(
+      map.entrySet().stream().map(e -> entry(e.getKey(), e.getValue())).collect(Collectors.toList()));
+  }
+
+  /**
+   * Returns a new multi-expression from {@code expressions} where multiple expressions for the same key stay separate,
+   * in cases where the order in which expressions matches is important.
+   */
+  public static <T> MultiExpression<T> ofOrdered(List<Entry<T>> expressions) {
+    return new MultiExpression<>(new ArrayList<>(expressions));
   }
 
   public static <T> Entry<T> entry(T result, Expression expression) {
@@ -60,10 +76,10 @@ public record MultiExpression<T>(List<Entry<T>> expressions) implements Simplifi
       case Expression.Or(var children) -> children.stream().anyMatch(MultiExpression::mustAlwaysEvaluate);
       case Expression.And(var children) -> children.stream().allMatch(MultiExpression::mustAlwaysEvaluate);
       case Expression.Not(var child) -> !mustAlwaysEvaluate(child);
-      case Expression.MatchAny any when any.matchWhenMissing() -> true;
+      case Expression.MatchAny any when any.mustAlwaysEvaluate() -> true;
       case null, default -> !(expression instanceof Expression.MatchAny) &&
-          !(expression instanceof Expression.MatchField) &&
-          !FALSE.equals(expression);
+        !(expression instanceof Expression.MatchField) &&
+        !FALSE.equals(expression);
     };
   }
 
@@ -79,7 +95,7 @@ public record MultiExpression<T>(List<Entry<T>> expressions) implements Simplifi
         or.children().forEach(child -> getRelevantKeys(child, acceptKey));
       } else if (exp instanceof Expression.MatchField field) {
         acceptKey.accept(field.field());
-      } else if (exp instanceof Expression.MatchAny any && !any.matchWhenMissing()) {
+      } else if (exp instanceof Expression.MatchAny any && !any.mustAlwaysEvaluate()) {
         acceptKey.accept(any.field());
       }
       // ignore not case since not(matchAny("field", "")) should track "field" as a relevant key, but that gets
@@ -436,7 +452,7 @@ public record MultiExpression<T>(List<Entry<T>> expressions) implements Simplifi
 
     @Override
     String extract(WithTags input) {
-      return input instanceof SourceFeature feature ? feature.getSourceLayer() : null;
+      return input instanceof WithSourceLayer feature ? feature.getSourceLayer() : null;
     }
   }
 
@@ -451,7 +467,7 @@ public record MultiExpression<T>(List<Entry<T>> expressions) implements Simplifi
 
     @Override
     String extract(WithTags input) {
-      return input instanceof SourceFeature feature ? feature.getSource() : null;
+      return input instanceof WithSource feature ? feature.getSource() : null;
     }
   }
 

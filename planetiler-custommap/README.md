@@ -65,6 +65,10 @@ A description that tells planetiler how to read geospatial objects with tags fro
   For [geofabrik](https://download.geofabrik.de/) named areas, use `geofabrik:`  prefixes, for
   example `geofabrik:rhode-island`. Can be a string or [expression](#expression) that can
   reference [argument values](#arguments).
+- `projection` - Planetiler will try to determine the projection automatically for shapefile/geopackage sources, but if
+  that is not correct you can override the projection by specifying a coordinate reference system authority code
+  like `EPSG:3857` or `EPSG:4326` here. Can be a string or [expression](#expression) that can
+  reference [argument values](#arguments).
 
 For example:
 
@@ -214,17 +218,22 @@ layers:
 
 A feature is a defined set of objects that meet a specified filter criteria.
 
-- `source` - A string [source](#source) ID, or list of source IDs from which features should be extracted
+- `source` - A string [source](#source) ID, or list of source IDs from which features should be extracted. If missing,
+  features from all sources are included.
 - `geometry` - A string enum that indicates which geometry types to include, and how to transform them. Can be one
   of:
   - `point` `line` or `polygon` to pass the original feature through
+  - `any` (default) to pass the original feature through regardless of geometry type
   - `polygon_centroid` to match on polygons, and emit a point at the center
-  - `line_centroid` to match on lines, and emit a point at the center
+  - `line_centroid` to match on lines, and emit a point at the centroid of the line
+  - `line_midpoint` to match on lines, and emit a point at midpoint of the line
   - `centroid` to match any geometry, and emit a point at the center
   - `polygon_point_on_surface` to match on polygons, and emit an interior point
   - `point_on_line` to match on lines, and emit a point somewhere along the line
   - `polygon_centroid_if_convex` to match on polygons, and if the polygon is convex emit the centroid, otherwise emit an
     interior point
+  - `innermost_point` to match on any geometry and for polygons, emit the furthest point from an edge, or for lines emit
+    the midpoint.
 - `include_when` - A [Boolean Expression](#boolean-expression) which determines the features to include.
   If unspecified, all features from the specified sources are included.
 - `exclude_when` - A [Boolean Expression](#boolean-expression) which determines if a feature that matched the include
@@ -405,13 +414,13 @@ value:
   water: otherwise
 ```
 
-If the values are not simple strings, then you can use an array of objects with `if` / `value` / `else` conditions:
+If the values are not simple strings, then you can use an array of objects with `if` and `value` keys and a last object with an `else` key:
 
 ```yaml
 value:
-  - value: 100000
-    if:
+  - if:
       place: city
+    value: 100000
   - value: 5000
     if:
       place: town
@@ -496,6 +505,38 @@ Additional variables, on top of the root context:
 - `feature.osm_user_id` - optional ID of the OSM user that last modified this feature
 - `feature.osm_user_name` - optional name of the OSM user that last modified this feature
 - `feature.osm_type` - type of the OSM element as a string: `"node"`, `"way"`, or `"relation"`
+
+On the original feature or any accessor that returns a geometry, you can also use:
+
+- `feature.length("unit")` - length of the feature if it is a line, 0 otherwise. Allowed units: "meters"/"m", "feet"
+  /"ft", "yards"/"yd", "nautical miles"/"nm", "kilometer"/"km" for units relative to the size in meters, or "z0 tiles"/"
+  z0 ti", "z0 pixels"/"z0 px" for sizes relative to the size of the geometry when projected into a z0 web mercator tile
+  containing the entire world.
+- `feature.area("unit")` - area of the feature if it is a polygon, 0 otherwise. Allowed units: any length unit like "
+  km2", "mi2", or "z0 px2" or also "acres"/"ac", "hectares"/"ha", or "ares"/"a".
+- `feature.min_lat` / `feature.min_lon` / `feature.max_lat` / `feature.max_lon` - returns coordinates from the bounding
+  box of this geometry
+- `feature.lat` / `feature.lon` - returns the coordinate of an arbitrary point on this shape (useful to get the lat/lon
+  of a point)
+- `feature.bbox` - returns the rectangle bounding box that contains this entire shape
+- `feature.centroid` - returns the weighted center point of the geometry, which may fall outside the the shape
+- `feature.point_on_surface` - returns a point that is within the shape (on the line, or inside the polygon)
+- `feature.validated_polygon` - if this is a polygon, fixes any self-intersections and returns the result
+- `feature.centroid_if_convex` - returns point_on_surface if this is a concave polygon, or centroid if convex
+- `feature.line_midpoint` - returns midpoint of this feature if it is a line
+- `feature.point_along_line(amount)` - when amount=0 returns the start of the line, when amount=1 returns the end,
+  otherwise a point at a certain ratio along the line
+- `feature.partial_line(start, end)` - returns a partial line segment from start to end where 0=the beginning of the
+  line and 1=the end
+- `feature.innermost_point` / `feature.innermost_point(tolerance)` - returns the midpoint of a line, or
+  the [pole of inaccessibility](https://en.wikipedia.org/wiki/Pole_of_inaccessibility) if it is a polygon
+
+For example:
+
+```yaml
+key: bbox_area_km2
+value: ${ feature.bbox.area('km2') }
+```
 
 ##### 3. Post-Match Context
 

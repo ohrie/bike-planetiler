@@ -24,6 +24,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class ForwardingProfileTests {
@@ -156,7 +157,7 @@ class ForwardingProfileTests {
   }
 
   @Test
-  void testLayerPostProcesser() throws GeometryException {
+  void testLayerPostProcessor() throws GeometryException {
     VectorTile.Feature feature = new VectorTile.Feature(
       "layer",
       1,
@@ -166,7 +167,7 @@ class ForwardingProfileTests {
     assertEquals(List.of(feature), profile.postProcessLayerFeatures("layer", 0, List.of(feature)));
 
     // ignore null response
-    profile.registerHandler(new ForwardingProfile.LayerPostProcesser() {
+    profile.registerHandler(new ForwardingProfile.LayerPostProcessor() {
       @Override
       public List<VectorTile.Feature> postProcess(int zoom, List<VectorTile.Feature> items) {
         return null;
@@ -180,7 +181,7 @@ class ForwardingProfileTests {
     assertEquals(List.of(feature), profile.postProcessLayerFeatures("a", 0, List.of(feature)));
 
     // allow mutations on initial input
-    profile.registerHandler(new ForwardingProfile.LayerPostProcesser() {
+    profile.registerHandler(new ForwardingProfile.LayerPostProcessor() {
       @Override
       public List<VectorTile.Feature> postProcess(int zoom, List<VectorTile.Feature> items) {
         items.set(0, items.getFirst());
@@ -195,7 +196,7 @@ class ForwardingProfileTests {
     assertEquals(List.of(feature), profile.postProcessLayerFeatures("a", 0, List.of(feature)));
 
     // empty list removes
-    profile.registerHandler(new ForwardingProfile.LayerPostProcesser() {
+    profile.registerHandler(new ForwardingProfile.LayerPostProcessor() {
       @Override
       public List<VectorTile.Feature> postProcess(int zoom, List<VectorTile.Feature> items) {
         return List.of();
@@ -211,7 +212,7 @@ class ForwardingProfileTests {
     assertEquals(List.of(feature), profile.postProcessLayerFeatures("b", 0, List.of(feature)));
 
     // allow mutations on subsequent input
-    profile.registerHandler(new ForwardingProfile.LayerPostProcesser() {
+    profile.registerHandler(new ForwardingProfile.LayerPostProcessor() {
       @Override
       public List<VectorTile.Feature> postProcess(int zoom, List<VectorTile.Feature> items) {
         items.add(null);
@@ -228,7 +229,7 @@ class ForwardingProfileTests {
     assertEquals(List.of(), profile.postProcessLayerFeatures("a", 0, new ArrayList<>(List.of(feature))));
 
     // 2 handlers for same layer run one after another
-    var skip1 = new ForwardingProfile.LayerPostProcesser() {
+    var skip1 = new ForwardingProfile.LayerPostProcessor() {
       @Override
       public List<VectorTile.Feature> postProcess(int zoom, List<VectorTile.Feature> items) {
         return items.stream().skip(1).toList();
@@ -241,7 +242,7 @@ class ForwardingProfileTests {
     };
     profile.registerHandler(skip1);
     profile.registerHandler(skip1);
-    profile.registerHandler(new ForwardingProfile.LayerPostProcesser() {
+    profile.registerHandler(new ForwardingProfile.LayerPostProcessor() {
       @Override
       public List<VectorTile.Feature> postProcess(int zoom, List<VectorTile.Feature> items) {
         return null; // ensure that returning null after initial post-processors run keeps the postprocessed result
@@ -454,5 +455,52 @@ class ForwardingProfileTests {
     testFeatures(List.of(Map.of(
       "_layer", "water"
     )), a);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "'--only-layers=water', water",
+    "'--exclude-layers=land,transportation,transportation_name', water",
+    // transportation excluded but transportation_name NOT => transportation will be processed
+    "'--exclude-layers=land,transportation', water transportation_name transportation",
+    "'--exclude-layers=land,transportation_name', water transportation",
+    "'--exclude-layers=land --only-layers=water,land', water",
+    // transportation excluded but transportation_name NOT => transportation will be processed
+    "'--exclude-layers=transportation --only-layers=water,transportation,transportation_name', water transportation_name transportation",
+    "'--exclude-layers=transportation_name --only-layers=water,transportation,transportation_name', water transportation",
+    "'--exclude-layers=transportation,transportation_name --only-layers=water,transportation,transportation_name', water",
+    // transportation excluded but transportation_name NOT => transportation will be processed
+    "'--exclude-layers=transportation --only-layers=water,transportation_name', water transportation_name transportation",
+    "'--exclude-layers=transportation_name --only-layers=water,transportation', water transportation",
+  })
+  void testLayerWithDepsCliArgFilter(String args, String expectedLayers) {
+    profile = new ForwardingProfile(PlanetilerConfig.from(Arguments.fromArgs(args.split(" ")))) {
+      @Override
+      public Map<String, List<String>> dependsOnLayer() {
+        return Map.of("transportation_name", List.of("transportation"));
+      }
+    };
+    record Processor(String name) implements ForwardingProfile.HandlerForLayer, ForwardingProfile.FeatureProcessor {
+
+      @Override
+      public void processFeature(SourceFeature sourceFeature, FeatureCollector features) {
+        features.point(name);
+      }
+    }
+
+    SourceFeature a = SimpleFeature.create(GeoUtils.EMPTY_POINT, Map.of("key", "value"), "source", "source layer", 1);
+    profile.registerHandler(new Processor("water"));
+    profile.registerHandler(new Processor("transportation"));
+    profile.registerHandler(new Processor("transportation_name"));
+    profile.registerHandler(new Processor("land"));
+    // profiles like OpenMapTiles will try to add "transportation" once again to cover for dependency
+    profile.registerHandler(new Processor("transportation"));
+
+    List<Map<String, Object>> expected = new ArrayList<>();
+    for (var expectedLayer : expectedLayers.split(" ")) {
+      expected.add(Map.of("_layer", expectedLayer));
+    }
+
+    testFeatures(expected, a);
   }
 }

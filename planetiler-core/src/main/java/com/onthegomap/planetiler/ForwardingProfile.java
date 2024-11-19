@@ -28,7 +28,7 @@ import java.util.function.Consumer;
  * <li>{@link FeatureProcessor} to handle features from a particular source (added through
  * {@link #registerSourceHandler(String, FeatureProcessor)})</li>
  * <li>{@link FinishHandler} to be notified whenever we finish processing each source</li>
- * <li>{@link LayerPostProcesser} to post-process features in a layer before rendering the output tile</li>
+ * <li>{@link LayerPostProcessor} to post-process features in a layer before rendering the output tile</li>
  * <li>{@link TilePostProcessor} to post-process features in a tile before rendering the output tile</li>
  * </ul>
  * See {@code OpenMapTilesProfile} for a full implementation using this framework.
@@ -44,8 +44,8 @@ public abstract class ForwardingProfile implements Profile {
   private final List<OsmRelationPreprocessor> osmRelationPreprocessors = new ArrayList<>();
   /** Handlers that get a callback when each source is finished reading. */
   private final List<FinishHandler> finishHandlers = new ArrayList<>();
-  /** Map from layer name to its handler if it implements {@link LayerPostProcesser}. */
-  private final Map<String, List<LayerPostProcesser>> layerPostProcessors = new HashMap<>();
+  /** Map from layer name to its handler if it implements {@link LayerPostProcessor}. */
+  private final Map<String, List<LayerPostProcessor>> layerPostProcessors = new HashMap<>();
   /** List of handlers that implement {@link TilePostProcessor}. */
   private final List<TilePostProcessor> tilePostProcessors = new ArrayList<>();
   /** List of handlers that implements {@link FeatureProcessor} along with a filter expression. */
@@ -81,11 +81,36 @@ public abstract class ForwardingProfile implements Profile {
   }
 
   private boolean caresAboutLayer(String layer) {
-    return (onlyLayers.isEmpty() || onlyLayers.contains(layer)) && !excludeLayers.contains(layer);
+    var dependencies = dependsOnLayer();
+    return ((onlyLayers.isEmpty() || onlyLayers.contains(layer)) && !excludeLayers.contains(layer)) ||
+      this.handlers.stream()
+        .filter(HandlerForLayer.class::isInstance)
+        .map(HandlerForLayer.class::cast)
+        .filter(l -> !l.name().equals(layer))
+        .anyMatch(
+          existing -> dependencies.containsKey(existing.name()) && dependencies.get(existing.name()).contains(layer));
   }
 
   public boolean caresAboutLayer(Object obj) {
     return !(obj instanceof HandlerForLayer l) || caresAboutLayer(l.name());
+  }
+
+  /**
+   * Indicate to {@link #caresAboutLayer(String)} what layers (dependents) rely on other layers (dependencies) so that
+   * methods like {@link #registerFeatureHandler(FeatureProcessor)}, {@link #registerHandler(Handler)} or
+   * {@link #registerSourceHandler(String, FeatureProcessor)} do not block registration of those dependencies.
+   * <p>
+   * Dependencies are described as a map with dependent layer names as keys and lists containing dependency layer names
+   * as map values. Example: Layer named {@code transportation_name} depends on layer named {@code transportation}:
+   * <p>
+   * {@snippet :
+   * Map.of("transportation_name", List.of("transportation"));
+   * }
+   *
+   * @return a map describing dependencies
+   */
+  public Map<String, List<String>> dependsOnLayer() {
+    return Map.of();
   }
 
   /**
@@ -122,7 +147,7 @@ public abstract class ForwardingProfile implements Profile {
 
   /**
    * Call {@code handler} for different events based on which interfaces {@code handler} implements:
-   * {@link OsmRelationPreprocessor}, {@link FinishHandler}, {@link TilePostProcessor} or {@link LayerPostProcesser}.
+   * {@link OsmRelationPreprocessor}, {@link FinishHandler}, {@link TilePostProcessor} or {@link LayerPostProcessor}.
    */
   public void registerHandler(Handler handler) {
     if (!caresAboutLayer(handler)) {
@@ -141,7 +166,7 @@ public abstract class ForwardingProfile implements Profile {
     if (handler instanceof FinishHandler finishHandler) {
       finishHandlers.add(finishHandler);
     }
-    if (handler instanceof LayerPostProcesser postProcessor) {
+    if (handler instanceof LayerPostProcessor postProcessor) {
       layerPostProcessors.computeIfAbsent(postProcessor.name(), name -> new ArrayList<>())
         .add(postProcessor);
     }
@@ -222,7 +247,7 @@ public abstract class ForwardingProfile implements Profile {
   public List<VectorTile.Feature> postProcessLayerFeatures(String layer, int zoom, List<VectorTile.Feature> items)
     throws GeometryException {
     // delegate feature post-processing to each layer, if it implements FeaturePostProcessor
-    List<LayerPostProcesser> postProcessers = layerPostProcessors.get(layer);
+    List<LayerPostProcessor> postProcessers = layerPostProcessors.get(layer);
     List<VectorTile.Feature> result = makeMutable(items);
     if (postProcessers != null) {
       for (var handler : postProcessers) {
@@ -325,7 +350,7 @@ public abstract class ForwardingProfile implements Profile {
   }
 
   /** Handlers should implement this interface to post-process vector tile features before emitting an output layer. */
-  public interface LayerPostProcesser extends HandlerForLayer {
+  public interface LayerPostProcessor extends HandlerForLayer {
 
     /**
      * Apply any post-processing to features in this output layer of a tile before writing it to the output archive.
@@ -336,9 +361,13 @@ public abstract class ForwardingProfile implements Profile {
     List<VectorTile.Feature> postProcess(int zoom, List<VectorTile.Feature> items) throws GeometryException;
   }
 
-  /** @deprecated use {@link LayerPostProcesser} or {@link TilePostProcessor} instead */
+  /** @deprecated use {@link LayerPostProcessor} instead */
   @Deprecated(forRemoval = true)
-  public interface FeaturePostProcessor extends LayerPostProcesser {}
+  public interface LayerPostProcesser extends LayerPostProcessor {}
+
+  /** @deprecated use {@link LayerPostProcessor} or {@link TilePostProcessor} instead */
+  @Deprecated(forRemoval = true)
+  public interface FeaturePostProcessor extends LayerPostProcessor {}
 
   /**
    * Handlers should implement this interface to post-process all features in a vector tile before writing to an

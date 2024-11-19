@@ -51,6 +51,20 @@
           "local_path": {
             "description": "Local path to the file to use, inferred from `url` if missing",
             "$ref": "#/$defs/expression"
+          },
+          "projection": {
+            "description": "Override the coordinate reference system authority code for a shapefile or geopackage source if it can not be determined automatically",
+            "anyOf": [
+              {
+                "enum": [
+                  "EPSG:3857",
+                  "EPSG:4326"
+                ]
+              },
+              {
+                "type": "#/$defs/expression"
+              }
+            ]
           }
         },
         "anyOf": [
@@ -342,27 +356,27 @@
     },
     "feature": {
       "type": "object",
-      "required": [
-        "geometry"
-      ],
       "properties": {
         "geometry": {
           "description": "Include objects of a certain geometry type",
           "type": "string",
           "enum": [
+            "any",
             "point",
             "line",
             "polygon",
             "polygon_centroid",
             "line_centroid",
+            "line_midpoint",
             "centroid",
             "polygon_centroid_if_convex",
             "polygon_point_on_surface",
-            "point_on_line"
+            "point_on_line",
+            "innermost_point"
           ]
         },
         "source": {
-          "description": "A source ID or list of source IDs from which features should be extracted",
+          "description": "A source ID or list of source IDs from which features should be extracted. If unspecified, all sources are included",
           "oneOf": [
             {
               "type": "string"
