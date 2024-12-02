@@ -90,6 +90,7 @@ public class BikeCyclehighways implements Profile {
         RouteRelationInfo relation = routeInfo.relation();
         // Break the output into layers named: "{bicycle,route}-route-{international,national,regional,local,other}"
         features.line("cyclehighway")
+          .setAttr("osm_id", sourceFeature.id())
           .setAttr("name", relation.name)
           .setAttr("ref", relation.ref)
           .setAttr("cycle_network", relation.cyclenetwork)
@@ -102,6 +103,7 @@ public class BikeCyclehighways implements Profile {
 
     if (sourceFeature.canBeLine() && (sourceFeature.hasTag("bicycle_road", "yes") || sourceFeature.hasTag("cyclestreet", "yes"))) {
         features.line("bicycleroad")
+          .setAttr("osm_id", sourceFeature.id())
           .setAttr("name", sourceFeature.getTag("name"))
           .setAttr("highway", sourceFeature.getTag("highway"))
           .setAttr("cyclestreet", sourceFeature.getTag("cyclestreet"))

@@ -49,7 +49,7 @@ public class BikeRouteOverlay implements Profile {
     // OSM ID of the relation (required):
     @Override long id,
     // Values for tags extracted from the OSM relation:
-    String name, String ref, String route, String distance, String network
+    String name, String ref, String route, String type, String distance, String network
   ) implements OsmRelationInfo {}
 
     // Set the zoom range for each network type
@@ -74,6 +74,7 @@ public class BikeRouteOverlay implements Profile {
           relation.getString("name"),
           relation.getString("ref"),
           relation.getString("route"),
+          relation.getString("type"),
           relation.getString("distance"),
           // except map network abbreviation to a human-readable value
           switch (relation.getString("network", "")) {
@@ -150,7 +151,7 @@ public class BikeRouteOverlay implements Profile {
 
   @Override
   public String name() {
-    return "Bike Paths Overlay";
+    return "Bike Routes";
   }
 
   @Override

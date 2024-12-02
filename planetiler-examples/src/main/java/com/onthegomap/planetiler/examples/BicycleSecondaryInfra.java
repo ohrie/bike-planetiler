@@ -256,18 +256,18 @@ public class BicycleSecondaryInfra implements Profile {
    * tags to improve line and text rendering in clients.
    */
 
-  @Override
-  public List<VectorTile.Feature> postProcessLayerFeatures(String layer, int zoom,
-    List<VectorTile.Feature> items) {
-    // FeatureMerge has several utilities for merging geometries in a layer that share the same tags.
-    // `mergeLineStrings` combines lines with the same tags where the endpoints touch.
-    // Tiles are 256x256 pixels and all FeatureMerge operations work in tile pixel coordinates.
-    return FeatureMerge.mergeLineStrings(items,
-      2, // in px: after merging, remove lines that are still less than px long
-      1, // simplify output linestrings using a tolerance in px
-      6 // remove any detail more than 4px outside the tile boundary
-    );
-  }
+  // @Override
+  // public List<VectorTile.Feature> postProcessLayerFeatures(String layer, int zoom,
+  //   List<VectorTile.Feature> items) {
+  //   // FeatureMerge has several utilities for merging geometries in a layer that share the same tags.
+  //   // `mergeLineStrings` combines lines with the same tags where the endpoints touch.
+  //   // Tiles are 256x256 pixels and all FeatureMerge operations work in tile pixel coordinates.
+  //   return FeatureMerge.mergeLineStrings(items,
+  //     2, // in px: after merging, remove lines that are still less than px long
+  //     1, // simplify output linestrings using a tolerance in px
+  //     6 // remove any detail more than 4px outside the tile boundary
+  //   );
+  // }
 
   /*
    * Hooks to override metadata values in the output mbtiles file. Only name is required, the rest are optional. Bounds,
@@ -278,12 +278,12 @@ public class BicycleSecondaryInfra implements Profile {
 
   @Override
   public String name() {
-    return "Bicycle Parking";
+    return "Bicycle Secondary Infra";
   }
 
   @Override
   public String description() {
-    return "Showing different kinds of parking facilities for bicycles";
+    return "Showing different kinds of parking, pumps and charging facilities for bicycles";
   }
 
   @Override
