@@ -5,7 +5,9 @@ import com.onthegomap.planetiler.collection.FeatureGroup;
 import com.onthegomap.planetiler.config.PlanetilerConfig;
 import com.onthegomap.planetiler.geo.GeoUtils;
 import com.onthegomap.planetiler.geo.GeometryException;
+import com.onthegomap.planetiler.geo.GeometryPipeline;
 import com.onthegomap.planetiler.geo.GeometryType;
+import com.onthegomap.planetiler.geo.SimplifyMethod;
 import com.onthegomap.planetiler.reader.SourceFeature;
 import com.onthegomap.planetiler.reader.Struct;
 import com.onthegomap.planetiler.render.FeatureRenderer;
@@ -502,6 +504,12 @@ public class FeatureCollector implements Iterable<FeatureCollector.Feature> {
     private double pixelToleranceAtMaxZoom = config.simplifyToleranceAtMaxZoom();
     private ZoomFunction<Number> pixelTolerance = null;
 
+    private SimplifyMethod defaultSimplifyMethod = SimplifyMethod.DOUGLAS_PEUCKER;
+    private ZoomFunction<SimplifyMethod> simplifyMethod = null;
+
+    private GeometryPipeline defaultGeometryPipeline = null;
+    private ZoomFunction<GeometryPipeline> geometryPipelineByZoom = null;
+
     private String numPointsAttr = null;
     private List<OverrideCommand> partialOverrides = null;
 
@@ -712,6 +720,62 @@ public class FeatureCollector implements Iterable<FeatureCollector.Feature> {
     public double getPixelToleranceAtZoom(int zoom) {
       return zoom == config.maxzoomForRendering() ? pixelToleranceAtMaxZoom :
         ZoomFunction.applyAsDoubleOrElse(pixelTolerance, zoom, defaultPixelTolerance);
+    }
+
+    /**
+     * Sets the fallback line and polygon simplify method when not overriden by *
+     * {@link #setSimplifyMethodOverrides(ZoomFunction)}.
+     */
+    public FeatureCollector.Feature setSimplifyMethod(SimplifyMethod strategy) {
+      defaultSimplifyMethod = strategy;
+      return this;
+    }
+
+    /** Set simplification algorithm to use at different zoom levels. */
+    public FeatureCollector.Feature setSimplifyMethodOverrides(ZoomFunction<SimplifyMethod> overrides) {
+      simplifyMethod = overrides;
+      return this;
+    }
+
+    /**
+     * Returns the simplification method for lines and polygons in tile pixels at {@code zoom}.
+     */
+    public SimplifyMethod getSimplifyMethodAtZoom(int zoom) {
+      return ZoomFunction.applyOrElse(simplifyMethod, zoom, defaultSimplifyMethod);
+    }
+
+    /**
+     * Sets the default pipeline to apply to geometries scaled to tile coordinates right before emitting vector tile
+     * features. This function gets run instead of simplification, so should include any simplification if you want
+     * that.
+     * <p>
+     * Geometries will be in scaled tile coordinates, so {@code 0,0} is the northwest corner and {@code 2^z, 2^z} is the
+     * southeast corner of the world scaled to web mercator coordinates.
+     */
+    public Feature transformScaledGeometry(GeometryPipeline pipeline) {
+      this.defaultGeometryPipeline = pipeline;
+      return this;
+    }
+
+    /**
+     * Dynamically change the geometry pipeline to apply to geometries scaled to tile coordinates right before emitting
+     * vector tile features at each zoom level. These functions get run instead of simplification, so should include any
+     * simplification if you want that.
+     * <p>
+     * Geometries will be in scaled tile coordinates, so {@code 0,0} is the northwest corner and {@code 2^z, 2^z} is the
+     * southeast corner of the world scaled to web mercator coordinates.
+     */
+    public Feature transformScaledGeometryByZoom(ZoomFunction<GeometryPipeline> overrides) {
+      this.geometryPipelineByZoom = overrides;
+      return this;
+    }
+
+    /**
+     * Returns the geometry transform function to apply to scaled geometries at {@code zoom}, or null to not update them
+     * at all.
+     */
+    public GeometryPipeline getScaledGeometryTransformAtZoom(int zoom) {
+      return ZoomFunction.applyOrElse(geometryPipelineByZoom, zoom, defaultGeometryPipeline);
     }
 
     /**
@@ -1063,6 +1127,10 @@ public class FeatureCollector implements Iterable<FeatureCollector.Feature> {
         }
       }
       return rangesWithGeometries;
+    }
+
+    public SourceFeature source() {
+      return source;
     }
 
 

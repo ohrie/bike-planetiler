@@ -1,12 +1,13 @@
 package com.onthegomap.planetiler.geo;
 
-import static com.onthegomap.planetiler.TestUtils.assertSameNormalizedFeature;
-import static com.onthegomap.planetiler.TestUtils.newLineString;
-import static com.onthegomap.planetiler.TestUtils.newPolygon;
-import static com.onthegomap.planetiler.TestUtils.rectangle;
+import static com.onthegomap.planetiler.TestUtils.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.geom.Polygonal;
 import org.locationtech.jts.geom.util.AffineTransformation;
 
 class DouglasPeuckerSimplifierTest {
@@ -16,11 +17,24 @@ class DouglasPeuckerSimplifierTest {
   private void testSimplify(Geometry in, Geometry expected, double amount) {
     for (int rotation : rotations) {
       var rotate = AffineTransformation.rotationInstance(Math.PI * rotation / 180);
+      var expRot = rotate.transform(expected);
+      var inRot = rotate.transform(in);
       assertSameNormalizedFeature(
-        rotate.transform(expected),
-        DouglasPeuckerSimplifier.simplify(rotate.transform(in), amount)
+        expRot,
+        DouglasPeuckerSimplifier.simplify(inRot, amount)
       );
+
+      // ensure the List<Coordinate> version also works...
+      List<Coordinate> inList = List.of(inRot.getCoordinates());
+      List<Coordinate> expList = List.of(expRot.getCoordinates());
+      List<Coordinate> actual = DouglasPeuckerSimplifier.simplify(inList, amount, in instanceof Polygonal);
+      assertEquals(expList, actual);
     }
+  }
+
+  @Test
+  void testDontModifyPoint() {
+    testSimplify(newPoint(1, 1), newPoint(1, 1), 1);
   }
 
   @Test
@@ -65,8 +79,8 @@ class DouglasPeuckerSimplifierTest {
       rectangle(0, 10),
       newPolygon(
         0, 0,
-        10, 10,
         10, 0,
+        10, 10,
         0, 0
       ),
       20

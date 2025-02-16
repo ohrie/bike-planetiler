@@ -1,16 +1,21 @@
 package com.onthegomap.planetiler;
 
+import static com.onthegomap.planetiler.VectorTile.ALL;
+import static com.onthegomap.planetiler.VectorTile.VectorGeometry.getSide;
+import static com.onthegomap.planetiler.VectorTile.VectorGeometry.segmentCrossesTile;
+
 import com.carrotsearch.hppc.IntArrayList;
 import com.carrotsearch.hppc.IntObjectMap;
 import com.carrotsearch.hppc.IntStack;
 import com.onthegomap.planetiler.collection.Hppc;
-import com.onthegomap.planetiler.geo.DouglasPeuckerSimplifier;
 import com.onthegomap.planetiler.geo.GeoUtils;
 import com.onthegomap.planetiler.geo.GeometryException;
+import com.onthegomap.planetiler.geo.GeometryPipeline;
 import com.onthegomap.planetiler.geo.GeometryType;
 import com.onthegomap.planetiler.geo.MutableCoordinateSequence;
 import com.onthegomap.planetiler.stats.DefaultStats;
 import com.onthegomap.planetiler.stats.Stats;
+import com.onthegomap.planetiler.util.LoopLineMerger;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collection;
@@ -81,7 +86,7 @@ public class FeatureMerge {
    */
   public static List<VectorTile.Feature> mergeLineStrings(List<VectorTile.Feature> features,
     double minLength, double tolerance, double buffer, boolean resimplify) {
-    return mergeLineStrings(features, attrs -> minLength, tolerance, buffer, resimplify);
+    return mergeLineStrings(features, attrs -> minLength, tolerance, buffer, resimplify, null);
   }
 
   /**
@@ -143,12 +148,13 @@ public class FeatureMerge {
   }
 
   /**
-   * Merges linestrings with the same attributes as {@link #mergeLineStrings(List, Function, double, double, boolean)}
-   * except sets {@code resimplify=false} by default.
+   * Merges linestrings with the same attributes as
+   * {@link #mergeLineStrings(List, Function, double, double, boolean, GeometryPipeline)} except sets
+   * {@code resimplify=false} by default.
    */
   public static List<VectorTile.Feature> mergeLineStrings(List<VectorTile.Feature> features,
     Function<Map<String, Object>, Double> lengthLimitCalculator, double tolerance, double buffer) {
-    return mergeLineStrings(features, lengthLimitCalculator, tolerance, buffer, false);
+    return mergeLineStrings(features, lengthLimitCalculator, tolerance, buffer, false, null);
   }
 
   /**
@@ -156,7 +162,8 @@ public class FeatureMerge {
    * except with a dynamic length limit computed by {@code lengthLimitCalculator} for the attributes of each group.
    */
   public static List<VectorTile.Feature> mergeLineStrings(List<VectorTile.Feature> features,
-    Function<Map<String, Object>, Double> lengthLimitCalculator, double tolerance, double buffer, boolean resimplify) {
+    Function<Map<String, Object>, Double> lengthLimitCalculator, double tolerance, double buffer, boolean resimplify,
+    GeometryPipeline pipeline) {
     List<VectorTile.Feature> result = new ArrayList<>(features.size());
     var groupedByAttrs = groupByAttrs(features, result, GeometryType.LINE);
     for (List<VectorTile.Feature> groupedFeatures : groupedByAttrs) {
@@ -171,7 +178,13 @@ public class FeatureMerge {
       if (groupedFeatures.size() == 1 && buffer == 0d && lengthLimit == 0 && (!resimplify || tolerance == 0)) {
         result.add(feature1);
       } else {
-        LineMerger merger = new LineMerger();
+        LoopLineMerger merger = new LoopLineMerger()
+          .setTolerance(tolerance)
+          .setMergeStrokes(true)
+          .setMinLength(lengthLimit)
+          .setLoopMinLength(lengthLimit)
+          .setStubMinLength(0.5)
+          .setSegmentTransform(pipeline);
         for (VectorTile.Feature feature : groupedFeatures) {
           try {
             merger.add(feature.geometry().decode());
@@ -180,24 +193,14 @@ public class FeatureMerge {
           }
         }
         List<LineString> outputSegments = new ArrayList<>();
-        for (Object merged : merger.getMergedLineStrings()) {
-          if (merged instanceof LineString line && line.getLength() >= lengthLimit) {
-            // re-simplify since some endpoints of merged segments may be unnecessary
-            if (line.getNumPoints() > 2 && tolerance >= 0) {
-              Geometry simplified = DouglasPeuckerSimplifier.simplify(line, tolerance);
-              if (simplified instanceof LineString simpleLineString) {
-                line = simpleLineString;
-              } else {
-                LOGGER.warn("line string merge simplify emitted {}", simplified.getGeometryType());
-              }
-            }
-            if (buffer >= 0) {
-              removeDetailOutsideTile(line, buffer, outputSegments);
-            } else {
-              outputSegments.add(line);
-            }
+        for (var line : merger.getMergedLineStrings()) {
+          if (buffer >= 0) {
+            removeDetailOutsideTile(line, buffer, outputSegments);
+          } else {
+            outputSegments.add(line);
           }
         }
+
         if (!outputSegments.isEmpty()) {
           outputSegments = sortByHilbertIndex(outputSegments);
           Geometry newGeometry = GeoUtils.combineLineStrings(outputSegments);
@@ -292,12 +295,15 @@ public class FeatureMerge {
    * @param buffer      the amount (in tile pixels) to expand then contract polygons by in order to combine
    *                    almost-touching polygons
    * @param stats       for counting data errors
+   * @param pipeline    a transform that should be applied to each merged polygon in tile pixel coordinates where
+   *                    {@code 0,0} is the top-left and {@code 256,256} is the bottom-right corner of the tile
    * @return a new list containing all unaltered features in their original order, then each of the merged groups
    *         ordered by the index of the first element in that group from the input list.
    * @throws GeometryException if an error occurs encoding the combined geometry
    */
   public static List<VectorTile.Feature> mergeNearbyPolygons(List<VectorTile.Feature> features, double minArea,
-    double minHoleArea, double minDist, double buffer, Stats stats) throws GeometryException {
+    double minHoleArea, double minDist, double buffer, Stats stats, GeometryPipeline pipeline)
+    throws GeometryException {
     List<VectorTile.Feature> result = new ArrayList<>(features.size());
     Collection<List<VectorTile.Feature>> groupedByAttrs = groupByAttrs(features, result, GeometryType.POLYGON);
     for (List<VectorTile.Feature> groupedFeatures : groupedByAttrs) {
@@ -331,11 +337,25 @@ public class FeatureMerge {
           if (!(merged instanceof Polygonal) || merged.getEnvelopeInternal().getArea() < minArea) {
             continue;
           }
+          if (pipeline != null) {
+            merged = pipeline.apply(merged);
+            if (!(merged instanceof Polygonal)) {
+              continue;
+            }
+          }
           merged = GeoUtils.snapAndFixPolygon(merged, stats, "merge").reverse();
         } else {
           merged = polygonGroup.getFirst();
           if (!(merged instanceof Polygonal) || merged.getEnvelopeInternal().getArea() < minArea) {
             continue;
+          }
+          if (pipeline != null) {
+            Geometry after = pipeline.apply(merged);
+            if (!(after instanceof Polygonal)) {
+              continue;
+            } else if (after != merged) {
+              merged = GeoUtils.snapAndFixPolygon(after, stats, "merge_after_pipeline").reverse();
+            }
           }
         }
         extractPolygons(merged, outPolygons, minArea, minHoleArea);
@@ -359,7 +379,7 @@ public class FeatureMerge {
 
   public static List<VectorTile.Feature> mergeNearbyPolygons(List<VectorTile.Feature> features, double minArea,
     double minHoleArea, double minDist, double buffer) throws GeometryException {
-    return mergeNearbyPolygons(features, minArea, minHoleArea, minDist, buffer, DefaultStats.get());
+    return mergeNearbyPolygons(features, minArea, minHoleArea, minDist, buffer, DefaultStats.get(), null);
   }
 
 
@@ -463,19 +483,26 @@ public class FeatureMerge {
    */
   private static void extractPolygons(Geometry geom, List<Polygon> result, double minArea, double minHoleArea) {
     if (geom instanceof Polygon poly) {
-      if (Area.ofRing(poly.getExteriorRing().getCoordinateSequence()) > minArea) {
+      double outerArea = Area.ofRing(poly.getExteriorRing().getCoordinateSequence());
+      if (outerArea > minArea) {
         int innerRings = poly.getNumInteriorRing();
-        if (minHoleArea > 0 && innerRings > 0) {
-          List<LinearRing> rings = new ArrayList<>(innerRings);
-          for (int i = 0; i < innerRings; i++) {
-            LinearRing innerRing = poly.getInteriorRingN(i);
-            if (Area.ofRing(innerRing.getCoordinateSequence()) > minArea) {
-              rings.add(innerRing);
-            }
+        List<LinearRing> rings = innerRings == 0 ? List.of() : new ArrayList<>(innerRings);
+        for (int i = 0; i < innerRings; i++) {
+          LinearRing innerRing = poly.getInteriorRingN(i);
+          if (minHoleArea <= 0 || Area.ofRing(innerRing.getCoordinateSequence()) > minArea) {
+            rings.add(innerRing);
           }
-          if (rings.size() != innerRings) {
-            poly = GeoUtils.createPolygon(poly.getExteriorRing(), rings);
-          }
+        }
+        LinearRing exteriorRing = poly.getExteriorRing();
+        /* optimization: when merged polygon fill the entire tile, replace it with a canonical fill geometry to ensure
+         * that filled tiles are byte-for-byte equivalent. This allows archives that deduplicate tiles to better compress
+         * large filled areas like the ocean. */
+        double fillBuffer = isFill(outerArea, exteriorRing);
+        if (fillBuffer >= 0) {
+          exteriorRing = createFill(fillBuffer);
+        }
+        if (rings.size() != innerRings || exteriorRing != poly.getExteriorRing()) {
+          poly = GeoUtils.createPolygon(exteriorRing, rings);
         }
         result.add(poly);
       }
@@ -484,6 +511,42 @@ public class FeatureMerge {
         extractPolygons(geom.getGeometryN(i), result, minArea, minHoleArea);
       }
     }
+  }
+
+  private static final double NOT_FILL = -1;
+
+  /** If {@ocde exteriorRing} fills the entire tile, return the number of pixels that it overhangs, otherwise -1. */
+  private static double isFill(double outerArea, LinearRing exteriorRing) {
+    if (outerArea < 256 * 256) {
+      return NOT_FILL;
+    }
+    double proposedBuffer = (Math.sqrt(outerArea) - 256) / 2;
+    double min = -(proposedBuffer * 0.9);
+    double max = 256 + proposedBuffer * 0.9;
+    int visited = 0;
+    var cs = exteriorRing.getCoordinateSequence();
+    int nextSide = getSide(cs.getX(0), cs.getY(0), min, max);
+    for (int i = 0; i < cs.size() - 1; i++) {
+      int side = nextSide;
+      visited |= side;
+      nextSide = getSide(cs.getX(i + 1), cs.getY(i + 1), min, max);
+      if (segmentCrossesTile(side, nextSide)) {
+        return NOT_FILL;
+      }
+    }
+    return visited == ALL ? proposedBuffer : NOT_FILL;
+  }
+
+  private static LinearRing createFill(double buffer) {
+    double min = -buffer;
+    double max = buffer + 256;
+    return GeoUtils.JTS_FACTORY.createLinearRing(GeoUtils.coordinateSequence(
+      min, min,
+      max, min,
+      max, max,
+      min, max,
+      min, min
+    ));
   }
 
   /** Returns a map from index in {@code geometries} to index of every other geometry within {@code minDist}. */

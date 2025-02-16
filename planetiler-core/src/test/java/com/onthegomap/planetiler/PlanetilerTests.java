@@ -18,6 +18,7 @@ import com.onthegomap.planetiler.config.PlanetilerConfig;
 import com.onthegomap.planetiler.files.ReadableFilesArchive;
 import com.onthegomap.planetiler.geo.GeoUtils;
 import com.onthegomap.planetiler.geo.GeometryException;
+import com.onthegomap.planetiler.geo.SimplifyMethod;
 import com.onthegomap.planetiler.geo.TileCoord;
 import com.onthegomap.planetiler.geo.TileOrder;
 import com.onthegomap.planetiler.mbtiles.Mbtiles;
@@ -429,27 +430,79 @@ class PlanetilerTests {
     ), results.tiles);
   }
 
+
+  @Test
+  void testMinSize() throws Exception {
+    double x = 0.5 + Z14_WIDTH / 4;
+    double y = 0.5 + Z14_WIDTH / 4;
+    double lat = GeoUtils.getWorldLat(y);
+    double lng = GeoUtils.getWorldLon(x);
+    double delta = 5e-5;
+
+    var results = runWithReaderFeatures(
+      Map.of("threads", "1", "maxzoom", "15"),
+      List.of(
+        newReaderFeature(newPoint(lng, lat), Map.of(
+          "type", "point"
+        )),
+        newReaderFeature(rectangle(lng - delta, lat - delta, lng + delta, lat + delta), Map.of(
+          "type", "poly"
+        )),
+        newReaderFeature(newLineString(lng - delta, lat, lng + delta, lat), Map.of(
+          "type", "line"
+        ))
+      ),
+      (in, features) -> features.centroid("layer")
+        .setZoomRange(13, 15)
+        .setMinPixelSizeAtAllZooms(1)
+        .inheritAttrFromSource("type")
+    );
+
+    assertEquals(Map.of(
+      TileCoord.ofXYZ(Z15_TILES / 2, Z15_TILES / 2, 15), List.of(
+        feature(newPoint(128, 128), Map.of("type", "line")),
+        feature(newPoint(128, 128), Map.of("type", "poly"))
+      // omit point when min size is set
+      ),
+      TileCoord.ofXYZ(Z14_TILES / 2, Z14_TILES / 2, 14), List.of(
+        feature(newPoint(64, 64), Map.of("type", "line")),
+        feature(newPoint(64, 64), Map.of("type", "poly"))
+      ) // features are too small at z13
+    ), results.tiles);
+  }
+
   @ParameterizedTest
-  @ValueSource(booleans = {false, true})
-  void testLineString(boolean anyGeom) throws Exception {
+  @CsvSource({
+    "false,RETAIN_IMPORTANT_POINTS",
+    "false,RETAIN_EFFECTIVE_AREAS",
+    "false,RETAIN_WEIGHTED_EFFECTIVE_AREAS",
+    "true,RETAIN_IMPORTANT_POINTS",
+  })
+  void testLineString(boolean anyGeom, SimplifyMethod simplifyStrategy) throws Exception {
     double x1 = 0.5 + Z14_WIDTH / 2;
     double y1 = 0.5 + Z14_WIDTH / 2;
     double x2 = x1 + Z14_WIDTH;
     double y2 = y1 + Z14_WIDTH;
+    double ymid = (y1 + y2) / 2;
+    double xmid = (x1 + x2) / 2;
     double lat1 = GeoUtils.getWorldLat(y1);
     double lng1 = GeoUtils.getWorldLon(x1);
+    double latMid = GeoUtils.getWorldLat(ymid);
+    double lngMid = GeoUtils.getWorldLon(xmid);
     double lat2 = GeoUtils.getWorldLat(y2);
     double lng2 = GeoUtils.getWorldLon(x2);
 
     var results = runWithReaderFeatures(
       Map.of("threads", "1"),
       List.of(
-        newReaderFeature(newLineString(lng1, lat1, lng2, lat2), Map.of(
+        newReaderFeature(newLineString(lng1, lat1, lngMid, latMid, lng2, lat2), Map.of(
           "attr", "value"
         ))
       ),
       (in, features) -> (anyGeom ? features.anyGeometry("layer") : features.line("layer"))
         .setZoomRange(13, 14)
+        .setPixelTolerance(1)
+        .setSimplifyMethod(simplifyStrategy)
         .setBufferPixels(4)
     );
 
@@ -2088,10 +2141,13 @@ class PlanetilerTests {
     "--tile-compression=none",
     "--tile-compression=gzip",
     "--output-layerstats",
-    "--max-point-buffer=1"
+    "--max-point-buffer=1",
+    "--osm-test-path=monaco-latest.lz4.osm.pbf",
   })
   void testPlanetilerRunner(String args) throws Exception {
-    Path originalOsm = TestUtils.pathToResource("monaco-latest.osm.pbf");
+    var argParsed = Arguments.fromArgs(args.split(" "));
+    Path originalOsm =
+      TestUtils.pathToResource(argParsed.getString("osm-test-path", "osm-test-path", "monaco-latest.osm.pbf"));
     Path tempOsm = tempDir.resolve("monaco-temp.osm.pbf");
     final TileCompression tileCompression = extractTileCompression(args);
 
@@ -2138,6 +2194,7 @@ class PlanetilerTests {
       .addNaturalEarthSource("ne", TestUtils.pathToResource("natural_earth_vector.sqlite"))
       .addShapefileSource("shapefile", TestUtils.pathToResource("shapefile.zip"))
       .addGeoPackageSource("geopackage", TestUtils.pathToResource("geopackage.gpkg.zip"), null)
+      .addGeoJsonSource("geojson", TestUtils.pathToResource("featurecollection.geojson"), null)
       .setOutput(outputUri)
       .run();
 
@@ -2550,8 +2607,13 @@ class PlanetilerTests {
     assertEquals(bboxResult.tiles, polyResult.tiles);
   }
 
-  @Test
-  void testSimplePolygon() throws Exception {
+  @ParameterizedTest
+  @CsvSource({
+    "RETAIN_IMPORTANT_POINTS",
+    "RETAIN_EFFECTIVE_AREAS",
+    "RETAIN_WEIGHTED_EFFECTIVE_AREAS",
+  })
+  void testSimplePolygon(SimplifyMethod strategy) throws Exception {
     List<Coordinate> points = z14PixelRectangle(0, 40);
 
     var results = runWithReaderFeatures(
@@ -2562,6 +2624,8 @@ class PlanetilerTests {
       (in, features) -> features.polygon("layer")
         .setZoomRange(0, 14)
         .setBufferPixels(0)
+        .setPixelTolerance(1)
+        .setSimplifyMethod(strategy)
         .setMinPixelSize(10) // should only show up z14 (40) z13 (20) and z12 (10)
     );
 
@@ -2709,6 +2773,17 @@ class PlanetilerTests {
     int z8tiles = 1 << 8;
     assertFalse(polyResultz8.tiles.containsKey(TileCoord.ofXYZ(z8tiles * 3 / 4, z8tiles * 5 / 8, 8)));
     assertTrue(polyResultz8.tiles.containsKey(TileCoord.ofXYZ(z8tiles * 3 / 4, z8tiles * 7 / 8, 8)));
+  }
+
+  @Test
+  void testDefaultLanguages() {
+    var planetiler = Planetiler.create(Arguments.of("languages", "default,en"))
+      .setDefaultLanguages(List.of("jbo", "tlh"));
+    var translations = planetiler.translations();
+    assertTrue(translations.careAboutLanguage("jbo"));
+    assertTrue(translations.careAboutLanguage("tlh"));
+    assertTrue(translations.careAboutLanguage("en"));
+    assertFalse(translations.careAboutLanguage("fr"));
   }
 
   @FunctionalInterface
