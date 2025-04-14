@@ -1,0 +1,20 @@
+services:
+  compiler:
+    build:
+      context: ./docker/builder
+      dockerfile: Dockerfile
+    volumes:
+      - ./output:/app/output
+    working_dir: /app
+    command: mvn clean package --file standalone.pom.xml
+
+  app:
+    build:
+      context: ./docker/app
+      dockerfile: Dockerfile
+    depends_on:
+      - compiler
+    volumes:
+      - ./output:/app/output
+    working_dir: /app
+    command: java -cp output/*-with-deps.jar com.onthegomap.planetiler.examples.BikeCyclehighways
